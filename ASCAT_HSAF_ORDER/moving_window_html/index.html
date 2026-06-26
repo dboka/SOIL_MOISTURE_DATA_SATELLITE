@@ -1,0 +1,727 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Latvia soil moisture moving window</title>
+  <script src="./data/hsaf_frames.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07110f;
+      --panel: rgba(10, 22, 21, 0.86);
+      --panel-strong: rgba(9, 18, 18, 0.94);
+      --line: rgba(209, 232, 222, 0.16);
+      --text: #ecfff8;
+      --muted: #9eb7af;
+      --accent: #89e7bb;
+      --accent-2: #42bbb2;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 18% 12%, rgba(88, 166, 137, 0.18), transparent 28%),
+        linear-gradient(135deg, #06100e 0%, #0f1615 42%, #111512 100%);
+      color: var(--text);
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      grid-template-rows: 1fr auto;
+      height: 100vh;
+    }
+
+    .map-wrap {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      cursor: crosshair;
+    }
+
+    .hud {
+      position: absolute;
+      left: 24px;
+      top: 22px;
+      max-width: min(570px, calc(100vw - 420px));
+      padding: 18px 20px 16px;
+      border: 1px solid var(--line);
+      background: linear-gradient(145deg, rgba(8, 20, 18, 0.86), rgba(20, 38, 35, 0.72));
+      backdrop-filter: blur(18px);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.32);
+    }
+
+    .eyebrow {
+      margin: 0 0 7px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(24px, 3vw, 42px);
+      line-height: 1.02;
+      letter-spacing: 0;
+    }
+
+    .hud p {
+      max-width: 54ch;
+      margin: 10px 0 0;
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: 14px;
+    }
+
+    .side {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 18px;
+      border-left: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(8, 16, 15, 0.96), rgba(9, 18, 17, 0.88));
+      backdrop-filter: blur(22px);
+      overflow: auto;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      padding: 16px;
+      border-radius: 8px;
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.24);
+    }
+
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 14px;
+      letter-spacing: 0;
+      color: #d9fff0;
+    }
+
+    .dataset-switch {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .dataset-button {
+      height: 46px;
+      border: 1px solid rgba(236, 255, 248, 0.16);
+      background: rgba(255, 255, 255, 0.045);
+      color: var(--muted);
+      border-radius: 8px;
+      font-weight: 780;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .dataset-button.active {
+      border-color: rgba(137, 231, 187, 0.75);
+      background: linear-gradient(145deg, rgba(137, 231, 187, 0.20), rgba(66, 187, 178, 0.10));
+      color: var(--text);
+      box-shadow: inset 0 0 0 1px rgba(137, 231, 187, 0.15);
+    }
+
+    .current-time {
+      font-size: 28px;
+      font-weight: 780;
+      line-height: 1.05;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .subtime {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .stat {
+      min-height: 72px;
+      padding: 12px;
+      border: 1px solid rgba(209, 232, 222, 0.12);
+      background: rgba(255, 255, 255, 0.035);
+      border-radius: 8px;
+    }
+
+    .stat .label {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .stat .value {
+      margin-top: 8px;
+      font-size: 22px;
+      font-weight: 760;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .legend {
+      height: 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: linear-gradient(90deg, #f7e58f, #86d37c, #42bbb2, #2476db, #172f90);
+    }
+
+    .legend-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .inspect {
+      display: grid;
+      gap: 9px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .inspect strong {
+      color: var(--text);
+      font-size: 20px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .pill {
+      padding: 7px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(137, 231, 187, 0.22);
+      background: rgba(137, 231, 187, 0.08);
+      color: #dffff2;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .timeline {
+      grid-column: 1 / -1;
+      padding: 14px 22px 18px;
+      border-top: 1px solid var(--line);
+      background: var(--panel-strong);
+      box-shadow: 0 -18px 60px rgba(0, 0, 0, 0.26);
+    }
+
+    .timeline-top {
+      display: grid;
+      grid-template-columns: 110px minmax(0, 1fr) 270px;
+      gap: 16px;
+      align-items: center;
+    }
+
+    button, select {
+      height: 38px;
+      border: 1px solid rgba(236, 255, 248, 0.18);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      font: inherit;
+    }
+
+    button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 13px;
+      font-weight: 760;
+      cursor: pointer;
+    }
+
+    button:hover, select:hover, .dataset-button:hover { border-color: rgba(137, 231, 187, 0.42); }
+
+    select {
+      width: 100%;
+      padding: 0 10px;
+      color: #eafff8;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .ticks {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .crosshair {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      margin: -7px 0 0 -7px;
+      border: 2px solid #ffffff;
+      border-radius: 999px;
+      box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.22), 0 0 22px rgba(137, 231, 187, 0.9);
+      pointer-events: none;
+      display: none;
+    }
+
+    @media (max-width: 900px) {
+      body { overflow: auto; }
+      .app {
+        grid-template-columns: 1fr;
+        grid-template-rows: 64vh auto auto;
+        min-height: 100vh;
+      }
+      .side {
+        border-left: 0;
+        border-top: 1px solid var(--line);
+      }
+      .hud {
+        left: 14px;
+        top: 14px;
+        max-width: calc(100vw - 28px);
+      }
+      .timeline-top {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="map-wrap" aria-label="Soil moisture map">
+      <canvas id="mapCanvas"></canvas>
+      <div id="crosshair" class="crosshair"></div>
+      <div class="hud">
+        <p id="eyebrow" class="eyebrow">Latvia soil moisture</p>
+        <h1 id="heroTitle">Moving window soil moisture</h1>
+        <p id="heroCopy">Switch between HSAF ASCAT overpasses and Copernicus CLMS daily SSM. Both layers use the same fixed 0-100% colour scale.</p>
+      </div>
+    </section>
+
+    <aside class="side">
+      <section class="panel">
+        <h2>Datu slanis</h2>
+        <div class="dataset-switch">
+          <button id="hsafButton" class="dataset-button active" type="button" data-dataset="hsaf">HSAF</button>
+          <button id="copernicusButton" class="dataset-button" type="button" data-dataset="copernicus">Copernicus SSM</button>
+          <button id="swiButton" class="dataset-button" type="button" data-dataset="swi_cop">SWI_COP</button>
+          <button id="era5Button" class="dataset-button" type="button" data-dataset="era5">ERA5-Land</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 id="timePanelTitle">Pasreizejais kadrs</h2>
+        <div id="currentTime" class="current-time">--</div>
+        <div id="subTime" class="subtime">--</div>
+        <div class="pill-row" style="margin-top: 14px;">
+          <span id="satellite" class="pill">--</span>
+          <span id="coverage" class="pill">--</span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Kadra statistika</h2>
+        <div class="stats">
+          <div class="stat"><div class="label">Videji</div><div id="meanStat" class="value">--</div></div>
+          <div class="stat"><div class="label">Diapazons</div><div id="rangeStat" class="value">--</div></div>
+          <div class="stat"><div class="label">Sunas</div><div id="cellsStat" class="value">--</div></div>
+          <div class="stat"><div class="label">Avoti</div><div id="filesStat" class="value">--</div></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Skala</h2>
+        <div class="legend"></div>
+        <div class="legend-labels"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+      </section>
+
+      <section class="panel">
+        <h2>Izveleta suna</h2>
+        <div id="inspect" class="inspect">
+          <span>Klikskini uz krasainas sunas karte.</span>
+        </div>
+      </section>
+    </aside>
+
+    <section class="timeline">
+      <div class="timeline-top">
+        <button id="playButton" type="button" aria-label="Play or pause">Atskanot</button>
+        <div>
+          <input id="timeSlider" type="range" min="0" value="0" step="1" />
+          <div id="ticks" class="ticks"></div>
+        </div>
+        <div>
+          <select id="tzSelect" aria-label="Display time zone">
+            <option value="Europe/Riga">Europe/Riga</option>
+            <option value="UTC">UTC</option>
+          </select>
+          <div id="timeHint" class="hint">Laika josla rada kadra sakumu. To vari mainit seit.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const rootData = window.HSAF_VIEWER_DATA || {
+      defaultDataset: "hsaf",
+      grid: window.HSAF_DATA.grid,
+      lon: window.HSAF_DATA.lon,
+      lat: window.HSAF_DATA.lat,
+      datasets: { hsaf: window.HSAF_DATA },
+    };
+    const canvas = document.getElementById("mapCanvas");
+    const ctx = canvas.getContext("2d", { alpha: true });
+    const slider = document.getElementById("timeSlider");
+    const playButton = document.getElementById("playButton");
+    const tzSelect = document.getElementById("tzSelect");
+    const crosshair = document.getElementById("crosshair");
+    const width = rootData.grid.width;
+    const height = rootData.grid.height;
+    const nodata = rootData.grid.nodata;
+    const scale = rootData.grid.valueScale;
+    let datasetKey = rootData.defaultDataset || "hsaf";
+    let data = rootData.datasets[datasetKey];
+    let frameIndex = 0;
+    let playing = false;
+    let timer = null;
+    let imageCache = new Map();
+    let rasterCanvasCache = new Map();
+    let view = { x: 0, y: 0, w: 0, h: 0 };
+    let lastClick = null;
+
+    function fmtDate(iso, options = {}) {
+      return new Intl.DateTimeFormat("lv-LV", {
+        timeZone: tzSelect.value,
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+        ...options,
+      }).format(new Date(iso));
+    }
+
+    function tickLabel(iso) {
+      return new Intl.DateTimeFormat("lv-LV", {
+        timeZone: tzSelect.value,
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).format(new Date(iso));
+    }
+
+    function valueColor(valuePct, alpha = 235) {
+      const stops = [
+        [0, [247, 229, 143]],
+        [20, [188, 218, 118]],
+        [40, [92, 199, 142]],
+        [60, [52, 179, 190]],
+        [80, [36, 118, 219]],
+        [100, [23, 47, 144]],
+      ];
+      const v = Math.max(0, Math.min(100, valuePct));
+      for (let i = 0; i < stops.length - 1; i++) {
+        const [aV, aC] = stops[i];
+        const [bV, bC] = stops[i + 1];
+        if (v >= aV && v <= bV) {
+          const t = (v - aV) / (bV - aV || 1);
+          return [
+            Math.round(aC[0] + (bC[0] - aC[0]) * t),
+            Math.round(aC[1] + (bC[1] - aC[1]) * t),
+            Math.round(aC[2] + (bC[2] - aC[2]) * t),
+            alpha,
+          ];
+        }
+      }
+      return [23, 47, 144, alpha];
+    }
+
+    function cacheKey(index) {
+      return `${datasetKey}:${index}`;
+    }
+
+    function imageForFrame(index) {
+      const key = cacheKey(index);
+      if (imageCache.has(key)) return imageCache.get(key);
+      const values = data.frames[index].values;
+      const image = new ImageData(width, height);
+      for (let i = 0; i < values.length; i++) {
+        const out = i * 4;
+        const raw = values[i];
+        if (raw === nodata) {
+          image.data[out + 3] = 0;
+          continue;
+        }
+        const [r, g, b, a] = valueColor(raw * scale);
+        image.data[out] = r;
+        image.data[out + 1] = g;
+        image.data[out + 2] = b;
+        image.data[out + 3] = a;
+      }
+      imageCache.set(key, image);
+      return image;
+    }
+
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.round(rect.width * dpr));
+      canvas.height = Math.max(1, Math.round(rect.height * dpr));
+      draw();
+    }
+
+    function computeView() {
+      const cw = canvas.width;
+      const ch = canvas.height;
+      const pad = Math.round(Math.min(cw, ch) * 0.045);
+      const sx = (cw - pad * 2) / width;
+      const sy = (ch - pad * 2) / height;
+      const s = Math.min(sx, sy);
+      view.w = width * s;
+      view.h = height * s;
+      view.x = (cw - view.w) / 2;
+      view.y = (ch - view.h) / 2;
+    }
+
+    function drawBackground() {
+      const cw = canvas.width;
+      const ch = canvas.height;
+      const gradient = ctx.createLinearGradient(0, 0, cw, ch);
+      gradient.addColorStop(0, "#091512");
+      gradient.addColorStop(0.55, "#10201d");
+      gradient.addColorStop(1, "#151712");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, cw, ch);
+
+      ctx.save();
+      ctx.strokeStyle = "rgba(236,255,248,0.045)";
+      ctx.lineWidth = 1;
+      const gap = Math.max(28, Math.round(Math.min(cw, ch) / 18));
+      for (let x = -gap; x < cw + gap; x += gap) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x + ch * 0.18, ch);
+        ctx.stroke();
+      }
+      for (let y = -gap; y < ch + gap; y += gap) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(cw, y + cw * 0.08);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawRaster() {
+      const key = cacheKey(frameIndex);
+      const image = imageForFrame(frameIndex);
+      let off = rasterCanvasCache.get(key);
+      if (!off) {
+        off = document.createElement("canvas");
+        off.width = width;
+        off.height = height;
+        off.getContext("2d").putImageData(image, 0, 0);
+        rasterCanvasCache.set(key, off);
+      }
+
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.shadowColor = "rgba(0,0,0,0.55)";
+      ctx.shadowBlur = 28;
+      ctx.shadowOffsetY = 18;
+      ctx.drawImage(off, view.x, view.y, view.w, view.h);
+      ctx.restore();
+
+      ctx.strokeStyle = "rgba(236,255,248,0.20)";
+      ctx.lineWidth = Math.max(1, canvas.width / 1200);
+      ctx.strokeRect(view.x, view.y, view.w, view.h);
+    }
+
+    function drawNoDataSilhouette() {
+      const values = data.frames[frameIndex].values;
+      ctx.save();
+      ctx.fillStyle = "rgba(236,255,248,0.028)";
+      const cellW = view.w / width;
+      const cellH = view.h / height;
+      for (let row = 0; row < height; row += 3) {
+        for (let col = 0; col < width; col += 3) {
+          const idx = row * width + col;
+          if (values[idx] !== nodata) continue;
+          ctx.fillRect(view.x + col * cellW, view.y + row * cellH, cellW * 2.5, cellH * 2.5);
+        }
+      }
+      ctx.restore();
+    }
+
+    function draw() {
+      computeView();
+      drawBackground();
+      drawNoDataSilhouette();
+      drawRaster();
+      if (lastClick) positionCrosshair(lastClick.clientX, lastClick.clientY);
+    }
+
+    function valueText(value) {
+      return value === null || Number.isNaN(value) ? "--" : value.toFixed(1);
+    }
+
+    function updateDatasetButtons() {
+      document.querySelectorAll(".dataset-button").forEach((button) => {
+        button.classList.toggle("active", button.dataset.dataset === datasetKey);
+      });
+    }
+
+    function updateText() {
+      const f = data.frames[frameIndex];
+      document.getElementById("eyebrow").textContent = `${data.name} · Latvia`;
+      document.getElementById("heroTitle").textContent = data.title;
+      const note = data.note ? ` ${data.note}` : "";
+      document.getElementById("heroCopy").textContent = `${data.subtitle}. Vienota 0-100% soil moisture skala; klikskis karte parada konkreto 1 km sunu.${note}`;
+      document.getElementById("timePanelTitle").textContent = data.timeMode === "daily" ? "Pasreizeja diena" : "Pasreizejais parlidojums";
+      document.getElementById("currentTime").textContent = fmtDate(f.startUtc, { weekday: "short" });
+      document.getElementById("subTime").textContent = `${fmtDate(f.startUtc)} - ${fmtDate(f.endUtc)} · ${tzSelect.value}`;
+      document.getElementById("satellite").textContent = f.satellite;
+      document.getElementById("coverage").textContent = `${f.coveragePct.toFixed(1)}% parklajums`;
+      document.getElementById("meanStat").textContent = `${valueText(f.mean)}%`;
+      document.getElementById("rangeStat").textContent = f.min === null || f.max === null ? "--" : `${f.min.toFixed(0)}-${f.max.toFixed(0)}%`;
+      document.getElementById("cellsStat").textContent = f.validCells.toLocaleString("lv-LV");
+      document.getElementById("filesStat").textContent = String(f.sourceFiles);
+      slider.max = String(data.frames.length - 1);
+      slider.value = String(frameIndex);
+      renderTicks();
+      updateDatasetButtons();
+      if (lastClick) inspectAtClient(lastClick.clientX, lastClick.clientY, false);
+    }
+
+    function renderTicks() {
+      const ticks = document.getElementById("ticks");
+      const indices = [0, Math.floor((data.frames.length - 1) / 2), data.frames.length - 1];
+      ticks.innerHTML = indices.map(i => `<span>${tickLabel(data.frames[i].startUtc)}</span>`).join("");
+    }
+
+    function setFrame(index) {
+      frameIndex = Math.max(0, Math.min(data.frames.length - 1, index));
+      updateText();
+      draw();
+    }
+
+    function setDataset(key) {
+      if (!rootData.datasets[key] || key === datasetKey) return;
+      datasetKey = key;
+      data = rootData.datasets[datasetKey];
+      frameIndex = 0;
+      lastClick = null;
+      crosshair.style.display = "none";
+      document.getElementById("inspect").innerHTML = "<span>Klikskini uz krasainas sunas karte.</span>";
+      updateText();
+      draw();
+    }
+
+    function positionCrosshair(clientX, clientY) {
+      const rect = canvas.getBoundingClientRect();
+      crosshair.style.display = "block";
+      crosshair.style.left = `${clientX - rect.left}px`;
+      crosshair.style.top = `${clientY - rect.top}px`;
+    }
+
+    function inspectAtClient(clientX, clientY, store = true) {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const x = (clientX - rect.left) * dpr;
+      const y = (clientY - rect.top) * dpr;
+      const col = Math.floor((x - view.x) / view.w * width);
+      const row = Math.floor((y - view.y) / view.h * height);
+      const inspect = document.getElementById("inspect");
+      if (col < 0 || col >= width || row < 0 || row >= height) {
+        inspect.innerHTML = "<span>Klikskini Latvijas rezga zona.</span>";
+        return;
+      }
+      const idx = row * width + col;
+      const raw = data.frames[frameIndex].values[idx];
+      const lon = rootData.lon[idx];
+      const lat = rootData.lat[idx];
+      if (store) {
+        lastClick = { clientX, clientY, row, col };
+        positionCrosshair(clientX, clientY);
+      }
+      if (raw === nodata) {
+        inspect.innerHTML = `
+          <span><strong>Nav derigas vertibas</strong></span>
+          <span>Lat ${lat.toFixed(5)}, Lon ${lon.toFixed(5)}</span>
+          <span>Rezga rinda ${row}, kolonna ${col}</span>
+        `;
+        return;
+      }
+      const value = raw * scale;
+      const unitLabel = data.id === "hsaf" ? "piesatinajums" : data.id === "era5" ? "volumetric soil water" : data.id === "swi_cop" ? "SWI010" : "SSM";
+      inspect.innerHTML = `
+        <span><strong>${value.toFixed(1)}%</strong> ${unitLabel}</span>
+        <span>Lat ${lat.toFixed(5)}, Lon ${lon.toFixed(5)}</span>
+        <span>Rezga rinda ${row}, kolonna ${col}</span>
+        <span>${data.frames[frameIndex].satellite} · ${fmtDate(data.frames[frameIndex].startUtc)}</span>
+        ${data.note ? `<span>${data.note}</span>` : ""}
+      `;
+    }
+
+    canvas.addEventListener("click", (event) => inspectAtClient(event.clientX, event.clientY));
+    slider.addEventListener("input", () => setFrame(Number(slider.value)));
+    tzSelect.addEventListener("change", updateText);
+    document.querySelectorAll(".dataset-button").forEach((button) => {
+      button.addEventListener("click", () => setDataset(button.dataset.dataset));
+    });
+    playButton.addEventListener("click", () => {
+      playing = !playing;
+      playButton.textContent = playing ? "Pauze" : "Atskanot";
+      if (timer) clearInterval(timer);
+      if (playing) {
+        timer = setInterval(() => setFrame((frameIndex + 1) % data.frames.length), 900);
+      }
+    });
+
+    window.addEventListener("resize", resize);
+    resize();
+    updateText();
+  </script>
+</body>
+</html>

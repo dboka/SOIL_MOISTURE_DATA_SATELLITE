@@ -1,0 +1,12 @@
+eumdac
+pandas
+numpy
+xarray
+netCDF4
+h5netcdf
+rasterio
+rioxarray
+geopandas
+matplotlib
+shapely
+pyproj

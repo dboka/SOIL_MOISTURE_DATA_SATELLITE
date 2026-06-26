@@ -1,0 +1,49 @@
+# Secrets and local config
+.env
+**/.env
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Python/runtime cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Large downloaded or generated geospatial data
+*.tar
+*.tar.gz
+*.zip
+*.nc
+*.tif
+*.tiff
+*.grib
+*.grb
+*.h5
+*.hdf
+*.hdf5
+
+# Project data products, except the static viewer bundle
+data/
+outputs/
+**/data/
+!ASCAT_HSAF_ORDER/moving_window_html/data/
+!ASCAT_HSAF_ORDER/moving_window_html/data/hsaf_frames.js
+
+# Local analysis outputs
+*.png
+*.jpg
+*.jpeg
+*.csv
+!metop_b_c_comparison.csv
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

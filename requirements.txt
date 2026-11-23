@@ -10,3 +10,4 @@ geopandas
 matplotlib
 shapely
 pyproj
+requests

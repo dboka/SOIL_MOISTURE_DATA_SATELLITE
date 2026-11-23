@@ -34,6 +34,7 @@ outputs/
 **/data/
 !ASCAT_HSAF_ORDER/moving_window_html/data/
 !ASCAT_HSAF_ORDER/moving_window_html/data/hsaf_frames.js
+!ASCAT_HSAF_ORDER/moving_window_html/data/gfsc_frames.js
 
 # Local analysis outputs
 *.png

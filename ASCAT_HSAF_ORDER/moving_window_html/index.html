@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Latvia soil moisture moving window</title>
   <script src="./data/hsaf_frames.js"></script>
+  <script src="./data/gfsc_frames.js"></script>
   <style>
     :root {
       color-scheme: dark;
@@ -186,6 +187,8 @@
       background: linear-gradient(90deg, #f7e58f, #86d37c, #42bbb2, #2476db, #172f90);
     }
 
+    .legend.gfsc { background: linear-gradient(90deg, #846248, #c0b19c, #d7eafa, #7fc4ed, #f5fbff); }
+
     .legend-labels {
       display: flex;
       justify-content: space-between;
@@ -332,7 +335,7 @@
       <div class="hud">
         <p id="eyebrow" class="eyebrow">Latvia soil moisture</p>
         <h1 id="heroTitle">Moving window soil moisture</h1>
-        <p id="heroCopy">Switch between HSAF ASCAT overpasses, the FTP 60-day ASCAT window, Copernicus, ERA5-Land, and SMAP soil moisture layers. All layers use the same fixed 0-100% colour scale.</p>
+        <p id="heroCopy">Choose a data layer and date to inspect coverage across Latvia.</p>
       </div>
     </section>
 
@@ -346,6 +349,7 @@
           <button id="swiButton" class="dataset-button" type="button" data-dataset="swi_cop">SWI_COP</button>
           <button id="era5Button" class="dataset-button" type="button" data-dataset="era5">ERA5-Land</button>
           <button id="smapButton" class="dataset-button" type="button" data-dataset="smap">SMAP</button>
+          <button id="gfscButton" class="dataset-button" type="button" data-dataset="gfsc">CLMS GFSC 60 m</button>
         </div>
       </section>
 
@@ -371,7 +375,7 @@
 
       <section class="panel">
         <h2>Skala</h2>
-        <div class="legend"></div>
+        <div id="legend" class="legend"></div>
         <div class="legend-labels"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
       </section>
 
@@ -454,7 +458,14 @@
     }
 
     function valueColor(valuePct, alpha = 235) {
-      const stops = [
+      const stops = data.id === "gfsc" ? [
+        [0, [132, 98, 72]],
+        [20, [192, 177, 156]],
+        [40, [215, 234, 250]],
+        [60, [127, 196, 237]],
+        [80, [214, 238, 250]],
+        [100, [245, 251, 255]],
+      ] : [
         [0, [247, 229, 143]],
         [20, [188, 218, 118]],
         [40, [92, 199, 142]],
@@ -476,7 +487,7 @@
           ];
         }
       }
-      return [23, 47, 144, alpha];
+      return [...stops[stops.length - 1][1], alpha];
     }
 
     function cacheKey(index) {
@@ -619,10 +630,14 @@
       document.getElementById("eyebrow").textContent = `${data.name} · Latvia`;
       document.getElementById("heroTitle").textContent = data.title;
       const note = data.note ? ` ${data.note}` : "";
-      document.getElementById("heroCopy").textContent = `${data.subtitle}. Vienota 0-100% soil moisture skala; klikskis karte parada konkreto 1 km sunu.${note}`;
+      document.getElementById("heroCopy").textContent = `${data.subtitle}. 0-100% ${data.scale.label}; klikšķis kartē parāda konkrēto 1 km šūnu.${note}`;
+      document.getElementById("legend").classList.toggle("gfsc", data.id === "gfsc");
       document.getElementById("timePanelTitle").textContent = data.timeMode === "daily" ? "Pasreizeja diena" : "Pasreizejais parlidojums";
       document.getElementById("currentTime").textContent = fmtDate(f.startUtc, { weekday: "short" });
-      document.getElementById("subTime").textContent = `${fmtDate(f.startUtc)} - ${fmtDate(f.endUtc)} · ${tzSelect.value}`;
+      const observationRange = data.id === "gfsc" && f.observations.length
+        ? ` · izmantotie pārlidojumi: ${fmtDate(f.observations[0].timeUtc)}–${fmtDate(f.observations[f.observations.length - 1].timeUtc)}`
+        : "";
+      document.getElementById("subTime").textContent = `${fmtDate(f.startUtc)} - ${fmtDate(f.endUtc)} · ${tzSelect.value}${observationRange}`;
       document.getElementById("satellite").textContent = f.satellite;
       document.getElementById("coverage").textContent = `${f.coveragePct.toFixed(1)}% parklajums`;
       document.getElementById("meanStat").textContent = `${valueText(f.mean)}%`;
@@ -696,12 +711,14 @@
         return;
       }
       const value = raw * scale;
-      const unitLabel = data.id === "hsaf" ? "piesatinajums" : data.id === "era5" ? "volumetric soil water" : data.id === "swi_cop" ? "SWI010" : data.id === "smap" ? "SMAP soil moisture" : "SSM";
+      const unitLabel = data.id === "gfsc" ? "sniega segums" : data.id === "hsaf" ? "piesatinajums" : data.id === "era5" ? "volumetric soil water" : data.id === "swi_cop" ? "SWI010" : data.id === "smap" ? "SMAP soil moisture" : "SSM";
+      const observation = data.id === "gfsc" ? data.frames[frameIndex].observations[data.frames[frameIndex].observationIndex[idx] - 1] : null;
       inspect.innerHTML = `
         <span><strong>${value.toFixed(1)}%</strong> ${unitLabel}</span>
         <span>Lat ${lat.toFixed(5)}, Lon ${lon.toFixed(5)}</span>
         <span>Rezga rinda ${row}, kolonna ${col}</span>
         <span>${data.frames[frameIndex].satellite} · ${fmtDate(data.frames[frameIndex].startUtc)}</span>
+        ${observation ? `<span>Izmantotais pārlidojums: ${observation.sensor} · ${fmtDate(observation.timeUtc)}</span>` : ""}
         ${data.note ? `<span>${data.note}</span>` : ""}
       `;
     }

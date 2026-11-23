@@ -8,6 +8,7 @@ The current focus is to search for, download, sample, and visually compare these
 - **Copernicus CLMS Surface Soil Moisture (SSM)** daily 1 km raster product
 - **Copernicus CLMS Soil Water Index (SWI)** daily 1 km raster product, currently using `SWI010`
 - **ERA5-Land volumetric soil water layer 1 (`swvl1`)**, shown as percent volumetric soil water for comparison
+- **Copernicus CLMS GFSC 60 m** daily fractional snow-cover composites, sampled to the viewer grid
 
 The interactive viewer lives in:
 
@@ -15,7 +16,7 @@ The interactive viewer lives in:
 ASCAT_HSAF_ORDER/moving_window_html/index.html
 ```
 
-It uses a fixed 0-100% colour scale and a Latvia 1x1 km viewer grid so the layers can be compared spatially. The viewer includes layer buttons for `HSAF`, `Copernicus SSM`, `SWI_COP`, and `ERA5-Land`.
+It uses a Latvia 1x1 km viewer grid. Soil moisture and snow cover both use 0-100% numeric scales, with distinct meanings and palettes. The viewer includes a `CLMS GFSC 60 m` layer for 17-20 November 2026. Clicking a valid snow-cover cell shows the source Sentinel observation time from the GFSC AT band.
 
 Important note: these variables are related, but not identical. H SAF ASCAT and Copernicus SSM are satellite surface soil moisture style products. SWI is a Soil Water Index with a time-depth memory, and ERA5-Land `swvl1` is model/reanalysis volumetric soil water in the upper soil layer.
 

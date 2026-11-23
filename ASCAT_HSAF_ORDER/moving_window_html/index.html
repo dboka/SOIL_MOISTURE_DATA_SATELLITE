@@ -7,6 +7,7 @@
   <script src="./data/hsaf_frames.js"></script>
   <script src="./data/gfsc_frames.js"></script>
   <script src="./data/sce_frames.js"></script>
+  <script src="./data/ims_frames.js"></script>
   <style>
     :root {
       color-scheme: dark;
@@ -189,6 +190,7 @@
     }
 
     .legend.gfsc { background: linear-gradient(90deg, #846248, #c0b19c, #d7eafa, #7fc4ed, #f5fbff); }
+    .legend.ims { background: linear-gradient(90deg, #846248 0%, #846248 49.5%, #f5fbff 50.5%, #f5fbff 100%); }
 
     .legend-labels {
       display: flex;
@@ -352,6 +354,7 @@
           <button id="smapButton" class="dataset-button" type="button" data-dataset="smap">SMAP</button>
           <button id="gfscButton" class="dataset-button" type="button" data-dataset="gfsc">CLMS GFSC 60 m</button>
           <button id="sceButton" class="dataset-button" type="button" data-dataset="sce">CLMS SCE 500 m</button>
+          <button id="imsButton" class="dataset-button" type="button" data-dataset="ims">NOAA IMS 1 km</button>
         </div>
       </section>
 
@@ -369,8 +372,8 @@
       <section class="panel">
         <h2>Kadra statistika</h2>
         <div class="stats">
-          <div class="stat"><div class="label">Videji</div><div id="meanStat" class="value">--</div></div>
-          <div class="stat"><div class="label">Diapazons</div><div id="rangeStat" class="value">--</div></div>
+          <div class="stat"><div id="meanLabel" class="label">Videji</div><div id="meanStat" class="value">--</div></div>
+          <div class="stat"><div id="rangeLabel" class="label">Diapazons</div><div id="rangeStat" class="value">--</div></div>
           <div class="stat"><div class="label">Sunas</div><div id="cellsStat" class="value">--</div></div>
           <div class="stat"><div class="label">Avoti</div><div id="filesStat" class="value">--</div></div>
         </div>
@@ -379,7 +382,7 @@
       <section class="panel">
         <h2>Skala</h2>
         <div id="legend" class="legend"></div>
-        <div class="legend-labels"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+        <div id="legendLabels" class="legend-labels"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
       </section>
 
       <section class="panel">
@@ -461,7 +464,7 @@
     }
 
     function valueColor(valuePct, alpha = 235) {
-      const stops = ["gfsc", "sce"].includes(data.id) ? [
+      const stops = ["gfsc", "sce", "ims"].includes(data.id) ? [
         [0, [132, 98, 72]],
         [20, [192, 177, 156]],
         [40, [215, 234, 250]],
@@ -633,22 +636,36 @@
       document.getElementById("eyebrow").textContent = `${data.name} · Latvia`;
       document.getElementById("heroTitle").textContent = data.title;
       const note = data.note ? ` ${data.note}` : "";
-      document.getElementById("heroCopy").textContent = `${data.subtitle}. 0-100% ${data.scale.label}; klikšķis kartē parāda konkrēto 1 km šūnu.${note}`;
+      document.getElementById("heroCopy").textContent = data.id === "ims"
+        ? `${data.subtitle}. IMS rāda sniegs / bez sniega klasi, nevis sniega segas procentu. Klikšķis kartē parāda šūnas klasi.${note}`
+        : `${data.subtitle}. 0-100% ${data.scale.label}; klikšķis kartē parāda konkrēto 1 km šūnu.${note}`;
       document.getElementById("legend").classList.toggle("gfsc", ["gfsc", "sce"].includes(data.id));
-      document.getElementById("timePanelTitle").textContent = data.timeMode === "daily" ? "Pasreizeja diena" : "Pasreizejais parlidojums";
+      document.getElementById("legend").classList.toggle("ims", data.id === "ims");
+      document.getElementById("legendLabels").innerHTML = data.id === "ims"
+        ? "<span>Bez sniega</span><span>Sniegs</span>"
+        : "<span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>";
+      document.getElementById("timePanelTitle").textContent = data.id === "ims" ? "Analīzes derīguma laiks" : data.timeMode === "daily" ? "Pasreizeja diena" : "Pasreizejais parlidojums";
       document.getElementById("currentTime").textContent = fmtDate(f.startUtc, { weekday: "short" });
       const observationRange = data.id === "gfsc" && f.observations.length
         ? ` · izmantotie pārlidojumi: ${fmtDate(f.observations[0].timeUtc)}–${fmtDate(f.observations[f.observations.length - 1].timeUtc)}`
         : "";
-      document.getElementById("subTime").textContent = `${fmtDate(f.startUtc)} - ${fmtDate(f.endUtc)} · ${tzSelect.value}${observationRange}`;
+      document.getElementById("subTime").textContent = data.id === "ims"
+        ? `${fmtDate(f.startUtc)} · ${tzSelect.value} · avots: ${f.source}`
+        : `${fmtDate(f.startUtc)} - ${fmtDate(f.endUtc)} · ${tzSelect.value}${observationRange}`;
       document.getElementById("satellite").textContent = f.satellite;
       document.getElementById("coverage").textContent = `${f.coveragePct.toFixed(1)}% parklajums`;
       const breakdown = f.coverageBreakdown;
       document.getElementById("coverageDetails").textContent = !breakdown ? "" : data.id === "sce"
         ? `${breakdown.noDataCells.toLocaleString("lv-LV")} šūnām nav derīgas vērtības · atsevišķi kodēti mākoņi: ${breakdown.cloudCells.toLocaleString("lv-LV")}`
+        : data.id === "ims"
+        ? `${breakdown.waterCells.toLocaleString("lv-LV")} ūdens/ledus šūnas izslēgtas · ${breakdown.noDataCells.toLocaleString("lv-LV")} ārpus analīzes`
         : `${breakdown.tilesOnLand}/${f.sourceFiles} flīzes skar Latvijas sauszemes režģi · ${breakdown.noTileCells.toLocaleString("lv-LV")} šūnām nav flīzes · ${breakdown.noDataCells.toLocaleString("lv-LV")} nav datu · ${breakdown.cloudCells.toLocaleString("lv-LV")} mākoņi`;
+      document.getElementById("meanLabel").textContent = data.id === "ims" ? "Sniega daļa" : "Vidēji";
+      document.getElementById("rangeLabel").textContent = data.id === "ims" ? "Sniega šūnas" : "Diapazons";
       document.getElementById("meanStat").textContent = `${valueText(f.mean)}%`;
-      document.getElementById("rangeStat").textContent = f.min === null || f.max === null ? "--" : `${f.min.toFixed(0)}-${f.max.toFixed(0)}%`;
+      document.getElementById("rangeStat").textContent = data.id === "ims"
+        ? f.snowCells.toLocaleString("lv-LV")
+        : f.min === null || f.max === null ? "--" : `${f.min.toFixed(0)}-${f.max.toFixed(0)}%`;
       document.getElementById("cellsStat").textContent = f.validCells.toLocaleString("lv-LV");
       document.getElementById("filesStat").textContent = String(f.sourceFiles);
       slider.max = String(data.frames.length - 1);
@@ -674,7 +691,7 @@
       if (!rootData.datasets[key] || key === datasetKey) return;
       datasetKey = key;
       data = rootData.datasets[datasetKey];
-      frameIndex = ["gfsc", "sce"].includes(key) ? data.frames.length - 1 : 0;
+      frameIndex = ["gfsc", "sce", "ims"].includes(key) ? data.frames.length - 1 : 0;
       lastClick = null;
       crosshair.style.display = "none";
       document.getElementById("inspect").innerHTML = "<span>Klikskini uz krasainas sunas karte.</span>";
@@ -714,6 +731,16 @@
           <span><strong>Nav derigas vertibas</strong></span>
           <span>Lat ${lat.toFixed(5)}, Lon ${lon.toFixed(5)}</span>
           <span>Rezga rinda ${row}, kolonna ${col}</span>
+        `;
+        return;
+      }
+      if (data.id === "ims") {
+        inspect.innerHTML = `
+          <span><strong>${raw === 1000 ? "Sniegs" : "Bez sniega"}</strong></span>
+          <span>Lat ${lat.toFixed(5)}, Lon ${lon.toFixed(5)}</span>
+          <span>Režģa rinda ${row}, kolonna ${col}</span>
+          <span>IMS analīze derīga ${fmtDate(data.frames[frameIndex].startUtc)} · ${tzSelect.value}</span>
+          <span>${data.note}</span>
         `;
         return;
       }

@@ -3,10 +3,12 @@
 `build_gfsc_viewer_data.py` searches the CDSE OData catalogue for GFSC 60 m products intersecting Latvia, downloads the product ZIPs, and writes `ASCAT_HSAF_ORDER/moving_window_html/data/gfsc_frames.js` for GitHub Pages. The ZIPs stay in the ignored `GFSC/data` directory. The bundle contains GF snow-cover percentages sampled on the existing 1 km viewer grid, plus acquisition times from AT and Sentinel-1/2 identification from QAFLAGS.
 
 ```powershell
-python GFSC/build_gfsc_viewer_data.py --start 2026-11-17 --end 2026-11-20 --env-file path/to/.env
+python GFSC/build_gfsc_viewer_data.py --start 2026-11-01 --end 2026-11-22 --env-file path/to/.env
 ```
 
 The `.env` file needs `CDSE_USER` and `CDSE_PASSWORD`. You can also set them as environment variables. Without dates, the script queries the last three completed days.
+
+The example covers all completed November 2026 days available on 23 November. The script queries each day separately because broad OData responses can repeat products across pages and omit others.
 
 GFSC is a daily seven-day composite. The product date is not an overpass time; each valid pixel's AT band holds its input observation's sensing start time. GF values 0-100 are valid snow-cover percentages. Codes 205 (cloud), 210 (water), and 255 (no data) are excluded. Coverage percentages use the Latvia land mask in the viewer, derived from its SWI layer. A cell with 0% snow cover is valid coverage.
 

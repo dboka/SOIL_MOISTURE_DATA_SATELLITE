@@ -49,24 +49,32 @@ def credentials(env_file: Path | None) -> tuple[str, str]:
 
 def catalogue(start: date, end: date) -> list[dict]:
     aoi = "POLYGON((20.9 55.6,28.3 55.6,28.3 58.2,20.9 58.2,20.9 55.6))"
-    filter_text = (
-        "Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'datasetIdentifier' "
-        f"and att/OData.CSC.StringAttribute/Value eq '{DATASET_ID}') and "
-        f"ContentDate/Start ge {start.isoformat()}T00:00:00.000Z and "
-        f"ContentDate/Start le {end.isoformat()}T23:59:59.999Z and "
-        f"OData.CSC.Intersects(area=geography'SRID=4326;{aoi}')"
-    )
-    url = CATALOGUE
-    params = {"$filter": filter_text, "$select": "Name,Id,ContentLength", "$top": 100}
-    results = []
-    while url:
-        response = requests.get(url, params=params, timeout=60)
+    products = {}
+    day = start
+    while day <= end:
+        # Query by day: a broad unsorted OData query can return duplicates
+        # across pages and omit real products when its result set exceeds 100.
+        filter_text = (
+            "Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'datasetIdentifier' "
+            f"and att/OData.CSC.StringAttribute/Value eq '{DATASET_ID}') and "
+            f"ContentDate/Start ge {day.isoformat()}T00:00:00.000Z and "
+            f"ContentDate/Start le {day.isoformat()}T23:59:59.999Z and "
+            f"OData.CSC.Intersects(area=geography'SRID=4326;{aoi}')"
+        )
+        response = requests.get(
+            CATALOGUE,
+            params={"$filter": filter_text, "$select": "Name,Id,ContentLength", "$top": 100},
+            timeout=60,
+        )
         response.raise_for_status()
         body = response.json()
-        results.extend(body.get("value", []))
-        url, params = body.get("@odata.nextLink"), None
-    products = [p for p in results if NAME_RE.fullmatch(p["Name"])]
-    return sorted(products, key=lambda p: p["Name"])
+        if body.get("@odata.nextLink"):
+            raise RuntimeError(f"More than 100 GFSC products found on {day}; narrow the search area")
+        for product in body.get("value", []):
+            if NAME_RE.fullmatch(product["Name"]):
+                products[product["Id"]] = product
+        day += timedelta(days=1)
+    return sorted(products.values(), key=lambda product: product["Name"])
 
 
 def token(user: str, password: str) -> str:

@@ -672,7 +672,7 @@
       if (!rootData.datasets[key] || key === datasetKey) return;
       datasetKey = key;
       data = rootData.datasets[datasetKey];
-      frameIndex = 0;
+      frameIndex = key === "gfsc" ? data.frames.length - 1 : 0;
       lastClick = null;
       crosshair.style.display = "none";
       document.getElementById("inspect").innerHTML = "<span>Klikskini uz krasainas sunas karte.</span>";

@@ -6,6 +6,7 @@
   <title>Latvia soil moisture moving window</title>
   <script src="./data/hsaf_frames.js"></script>
   <script src="./data/gfsc_frames.js"></script>
+  <script src="./data/sce_frames.js"></script>
   <style>
     :root {
       color-scheme: dark;
@@ -350,6 +351,7 @@
           <button id="era5Button" class="dataset-button" type="button" data-dataset="era5">ERA5-Land</button>
           <button id="smapButton" class="dataset-button" type="button" data-dataset="smap">SMAP</button>
           <button id="gfscButton" class="dataset-button" type="button" data-dataset="gfsc">CLMS GFSC 60 m</button>
+          <button id="sceButton" class="dataset-button" type="button" data-dataset="sce">CLMS SCE 500 m</button>
         </div>
       </section>
 
@@ -459,7 +461,7 @@
     }
 
     function valueColor(valuePct, alpha = 235) {
-      const stops = data.id === "gfsc" ? [
+      const stops = ["gfsc", "sce"].includes(data.id) ? [
         [0, [132, 98, 72]],
         [20, [192, 177, 156]],
         [40, [215, 234, 250]],
@@ -632,7 +634,7 @@
       document.getElementById("heroTitle").textContent = data.title;
       const note = data.note ? ` ${data.note}` : "";
       document.getElementById("heroCopy").textContent = `${data.subtitle}. 0-100% ${data.scale.label}; klikšķis kartē parāda konkrēto 1 km šūnu.${note}`;
-      document.getElementById("legend").classList.toggle("gfsc", data.id === "gfsc");
+      document.getElementById("legend").classList.toggle("gfsc", ["gfsc", "sce"].includes(data.id));
       document.getElementById("timePanelTitle").textContent = data.timeMode === "daily" ? "Pasreizeja diena" : "Pasreizejais parlidojums";
       document.getElementById("currentTime").textContent = fmtDate(f.startUtc, { weekday: "short" });
       const observationRange = data.id === "gfsc" && f.observations.length
@@ -642,9 +644,9 @@
       document.getElementById("satellite").textContent = f.satellite;
       document.getElementById("coverage").textContent = `${f.coveragePct.toFixed(1)}% parklajums`;
       const breakdown = f.coverageBreakdown;
-      document.getElementById("coverageDetails").textContent = breakdown
-        ? `${breakdown.tilesOnLand}/${f.sourceFiles} flīzes skar Latvijas sauszemes režģi · ${breakdown.noTileCells.toLocaleString("lv-LV")} šūnām nav flīzes · ${breakdown.noDataCells.toLocaleString("lv-LV")} nav datu · ${breakdown.cloudCells.toLocaleString("lv-LV")} mākoņi`
-        : "";
+      document.getElementById("coverageDetails").textContent = !breakdown ? "" : data.id === "sce"
+        ? `${breakdown.noDataCells.toLocaleString("lv-LV")} šūnām nav derīgas vērtības · atsevišķi kodēti mākoņi: ${breakdown.cloudCells.toLocaleString("lv-LV")}`
+        : `${breakdown.tilesOnLand}/${f.sourceFiles} flīzes skar Latvijas sauszemes režģi · ${breakdown.noTileCells.toLocaleString("lv-LV")} šūnām nav flīzes · ${breakdown.noDataCells.toLocaleString("lv-LV")} nav datu · ${breakdown.cloudCells.toLocaleString("lv-LV")} mākoņi`;
       document.getElementById("meanStat").textContent = `${valueText(f.mean)}%`;
       document.getElementById("rangeStat").textContent = f.min === null || f.max === null ? "--" : `${f.min.toFixed(0)}-${f.max.toFixed(0)}%`;
       document.getElementById("cellsStat").textContent = f.validCells.toLocaleString("lv-LV");
@@ -672,7 +674,7 @@
       if (!rootData.datasets[key] || key === datasetKey) return;
       datasetKey = key;
       data = rootData.datasets[datasetKey];
-      frameIndex = key === "gfsc" ? data.frames.length - 1 : 0;
+      frameIndex = ["gfsc", "sce"].includes(key) ? data.frames.length - 1 : 0;
       lastClick = null;
       crosshair.style.display = "none";
       document.getElementById("inspect").innerHTML = "<span>Klikskini uz krasainas sunas karte.</span>";
@@ -716,13 +718,14 @@
         return;
       }
       const value = raw * scale;
-      const unitLabel = data.id === "gfsc" ? "sniega segums" : data.id === "hsaf" ? "piesatinajums" : data.id === "era5" ? "volumetric soil water" : data.id === "swi_cop" ? "SWI010" : data.id === "smap" ? "SMAP soil moisture" : "SSM";
+      const unitLabel = ["gfsc", "sce"].includes(data.id) ? "sniega segums" : data.id === "hsaf" ? "piesatinajums" : data.id === "era5" ? "volumetric soil water" : data.id === "swi_cop" ? "SWI010" : data.id === "smap" ? "SMAP soil moisture" : "SSM";
       const observation = data.id === "gfsc" ? data.frames[frameIndex].observations[data.frames[frameIndex].observationIndex[idx] - 1] : null;
       inspect.innerHTML = `
         <span><strong>${value.toFixed(1)}%</strong> ${unitLabel}</span>
         <span>Lat ${lat.toFixed(5)}, Lon ${lon.toFixed(5)}</span>
         <span>Rezga rinda ${row}, kolonna ${col}</span>
         <span>${data.frames[frameIndex].satellite} · ${fmtDate(data.frames[frameIndex].startUtc)}</span>
+        ${data.id === "sce" ? `<span>MODIS novērojumu logs: ${fmtDate(data.frames[frameIndex].startUtc)}–${fmtDate(data.frames[frameIndex].endUtc)}</span>` : ""}
         ${observation ? `<span>Izmantotais pārlidojums: ${observation.sensor} · ${fmtDate(observation.timeUtc)}</span>` : ""}
         ${data.note ? `<span>${data.note}</span>` : ""}
       `;

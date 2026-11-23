@@ -115,11 +115,14 @@ def base_grid() -> tuple[dict, np.ndarray, np.ndarray, np.ndarray]:
 
 def frame(day: date, paths: list[Path], grid: dict, lon: np.ndarray, lat: np.ndarray, mask: np.ndarray) -> dict:
     values = np.full(lon.shape, grid["nodata"], dtype="int16")
+    status = np.full(lon.shape, -1, dtype="int16")
     observed = np.zeros(lon.shape, dtype="uint64")
     flat_lon, flat_lat = lon.ravel(), lat.ravel()
     flat_mask = mask.ravel()
     flat_values = values.ravel()
+    flat_status = status.ravel()
     flat_observed = observed.ravel()
+    tiles_on_land = 0
     for path in paths:
         with zipfile.ZipFile(path) as archive:
             members = {suffix: [name for name in archive.namelist() if name.endswith(suffix)]
@@ -131,27 +134,32 @@ def frame(day: date, paths: list[Path], grid: dict, lon: np.ndarray, lat: np.nda
                 xs, ys = transformer.transform(flat_lon, flat_lat)
                 bounds = src.bounds
                 indices = np.flatnonzero(
-                    flat_mask & (flat_values < 0) &
+                    flat_mask &
                     (xs >= bounds.left) & (xs < bounds.right) &
                     (ys >= bounds.bottom) & (ys < bounds.top)
                 )
                 if indices.size:
+                    tiles_on_land += 1
                     sampled = np.fromiter(
                         (item[0] for item in src.sample(zip(xs[indices], ys[indices]))),
                         dtype="uint8",
                         count=len(indices),
                     )
+                    previous = flat_status[indices]
+                    replace_status = (previous < 0) | ((previous > 100) & (sampled <= 100))
+                    flat_status[indices[replace_status]] = sampled[replace_status]
                     valid = sampled <= 100  # 205 cloud, 210 water, 255 no data
-                    flat_values[indices[valid]] = sampled[valid].astype("int16") * 10
-                    if np.any(valid):
-                        coords = list(zip(xs[indices[valid]], ys[indices[valid]]))
+                    use = valid & (flat_values[indices] < 0)
+                    flat_values[indices[use]] = sampled[use].astype("int16") * 10
+                    if np.any(use):
+                        coords = list(zip(xs[indices[use]], ys[indices[use]]))
                         with MemoryFile(archive.read(members["_AT.tif"][0])) as at_mem, at_mem.open() as at_src:
                             times = np.fromiter((item[0] for item in at_src.sample(coords)), dtype="uint32", count=len(coords))
                         with MemoryFile(archive.read(members["_QAFLAGS.tif"][0])) as flags_mem, flags_mem.open() as flags_src:
                             flags = np.fromiter((item[0] for item in flags_src.sample(coords)), dtype="uint8", count=len(coords))
                         # 1=S1, 2=S2; zero acquisition time remains unavailable.
                         sensor = np.where(flags & 128, 1, 2).astype("uint64")
-                        flat_observed[indices[valid]] = times.astype("uint64") * 3 + sensor
+                        flat_observed[indices[use]] = times.astype("uint64") * 3 + sensor
     valid_values = flat_values[flat_values >= 0].astype("float64") * grid["valueScale"]
     observation_codes = sorted(int(code) for code in np.unique(flat_observed) if code >= 3)
     observation_lookup = [
@@ -165,6 +173,7 @@ def frame(day: date, paths: list[Path], grid: dict, lon: np.ndarray, lat: np.nda
     for index, code in enumerate(observation_codes, 1):
         observation_index[flat_observed == code] = index
     day_text = day.isoformat()
+    land_status = flat_status[flat_mask]
     return {
         "date": day_text,
         "label": "GFSC daily composite",
@@ -174,6 +183,14 @@ def frame(day: date, paths: list[Path], grid: dict, lon: np.ndarray, lat: np.nda
         "coveragePct": round(float(valid_values.size / mask.sum() * 100), 2),
         "validCells": int(valid_values.size),
         "sourceFiles": len(paths),
+        "coverageBreakdown": {
+            "latviaLandCells": int(mask.sum()),
+            "tilesOnLand": tiles_on_land,
+            "noTileCells": int(np.count_nonzero(land_status < 0)),
+            "cloudCells": int(np.count_nonzero(land_status == 205)),
+            "waterCells": int(np.count_nonzero(land_status == 210)),
+            "noDataCells": int(np.count_nonzero(land_status == 255)),
+        },
         "observations": observation_lookup,
         "observationIndex": observation_index.tolist(),
         "min": round(float(valid_values.min()), 1) if valid_values.size else None,

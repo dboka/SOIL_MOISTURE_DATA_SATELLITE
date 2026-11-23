@@ -361,6 +361,7 @@
           <span id="satellite" class="pill">--</span>
           <span id="coverage" class="pill">--</span>
         </div>
+        <div id="coverageDetails" class="subtime"></div>
       </section>
 
       <section class="panel">
@@ -640,6 +641,10 @@
       document.getElementById("subTime").textContent = `${fmtDate(f.startUtc)} - ${fmtDate(f.endUtc)} · ${tzSelect.value}${observationRange}`;
       document.getElementById("satellite").textContent = f.satellite;
       document.getElementById("coverage").textContent = `${f.coveragePct.toFixed(1)}% parklajums`;
+      const breakdown = f.coverageBreakdown;
+      document.getElementById("coverageDetails").textContent = breakdown
+        ? `${breakdown.tilesOnLand}/${f.sourceFiles} flīzes skar Latvijas sauszemes režģi · ${breakdown.noTileCells.toLocaleString("lv-LV")} šūnām nav flīzes · ${breakdown.noDataCells.toLocaleString("lv-LV")} nav datu · ${breakdown.cloudCells.toLocaleString("lv-LV")} mākoņi`
+        : "";
       document.getElementById("meanStat").textContent = `${valueText(f.mean)}%`;
       document.getElementById("rangeStat").textContent = f.min === null || f.max === null ? "--" : `${f.min.toFixed(0)}-${f.max.toFixed(0)}%`;
       document.getElementById("cellsStat").textContent = f.validCells.toLocaleString("lv-LV");

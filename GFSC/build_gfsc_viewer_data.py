@@ -214,12 +214,18 @@ def main() -> None:
     parser.add_argument("--start", type=date.fromisoformat, default=yesterday - timedelta(days=2))
     parser.add_argument("--end", type=date.fromisoformat, default=yesterday)
     parser.add_argument("--env-file", type=Path)
+    parser.add_argument("--append", action="store_true", help="Keep earlier frames and add or replace queried dates")
     args = parser.parse_args()
     if args.end < args.start:
         parser.error("--end must be on or after --start")
     products = catalogue(args.start, args.end)
     if not products:
         raise RuntimeError("No GFSC products found for this area and date window")
+    available_days = {datetime.strptime(NAME_RE.fullmatch(item["Name"])["date"], "%Y%m%d").date() for item in products}
+    missing_days = [day.isoformat() for day in (args.start + timedelta(days=offset)
+                    for offset in range((args.end - args.start).days + 1)) if day not in available_days]
+    if missing_days:
+        print("GFSC dates not yet catalogued:", ", ".join(missing_days), flush=True)
     user, password = credentials(args.env_file)
     access_token = token(user, password)
     grid, lon, lat, mask = base_grid()
@@ -232,6 +238,13 @@ def main() -> None:
         by_day[day].append(path)
         print(f"[{number}/{len(products)}] {product['Name']}", flush=True)
     frames = [frame(day, paths, grid, lon, lat, mask) for day, paths in sorted(by_day.items())]
+    if args.append and OUT.is_file():
+        previous = json.loads(OUT.read_text(encoding="utf-8").split("=", 1)[1].rstrip(";\n"))
+        if previous.get("id") != "gfsc":
+            raise RuntimeError("Existing GFSC bundle has an unexpected dataset ID")
+        by_date = {item["date"]: item for item in previous["frames"]}
+        by_date.update({item["date"]: item for item in frames})
+        frames = [by_date[day] for day in sorted(by_date)]
     dataset = {
         "id": "gfsc",
         "name": "CLMS GFSC 60 m",

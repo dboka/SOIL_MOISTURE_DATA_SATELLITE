@@ -19,10 +19,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -35,6 +32,16 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: ASCAT_HSAF_ORDER/moving_window_html
+
+  deploy:
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for artifact registration
+        run: sleep 10
 
       - name: Deploy to GitHub Pages
         id: deployment
